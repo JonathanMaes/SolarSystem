@@ -1,9 +1,11 @@
 /*
 	Source for planets: http://www.met.rdg.ac.uk/~ross/Astronomy/Planets.html#elems
 */
-import {ReferencePlane, FreeReferencePlane, Orbit, NullOrbit, Parameter, Orbiter, Graphics, unit} from './classes.js';
+import {ReferencePlane, FreeReferencePlane, Orbit, NullOrbit, Parameter, Orbiter, Graphics, Rotation} from './classes.js';
+import {unit} from './units.js';
 
-let sol = new FreeReferencePlane(1.9884e30);
+let sol = new FreeReferencePlane(new Parameter(1, 'M☉'));
+let equatorial_sol = new FreeReferencePlane(new Parameter(1, 'M☉'), 0, 0, 0, 0, -23.4, 0);
 
 // Mercury
 let mercury_orbit = new Orbit(sol, {
@@ -36,7 +38,9 @@ let earth_orbit = new Orbit(sol, {
 	e: new Parameter([0.01671022, -0.00003804], '', 'Cy'),
 	L0: new Parameter([100.46435, unit(129597740.63, 'as', 'deg')], 'deg', 'Cy')
 });
-let earth = new Orbiter('Earth', 'planet', earth_orbit, {graphics:new Graphics([0,0,255], new Parameter(6371.00, 'km'))});
+let earth_graphics = new Graphics([0,0,255], new Parameter(6371.00, 'km'), {textureFile:'data/textures/planets/earth.jpg'});
+let earth_rotation = new Rotation(equatorial_sol, 0, 90, new Parameter([0, 360.99], 'deg', 'day'));
+let earth = new Orbiter('Earth', 'planet', earth_orbit, {graphics:earth_graphics, rotation:earth_rotation});
 
 // Mars
 let mars_orbit = new Orbit(sol, {
@@ -47,7 +51,7 @@ let mars_orbit = new Orbit(sol, {
 	e: new Parameter([0.09341233, 0.00011902], '', 'Cy'),
 	L0: new Parameter([355.45332, unit(68905103.78, 'as', 'deg')], 'deg', 'Cy')
 });
-let mars = new Orbiter('Mars', 'planet', mars_orbit, {graphics:new Graphics([255,100,100], new Parameter(3389.5, 'km'))});
+let mars = new Orbiter('Mars', 'planet', mars_orbit, {graphics:new Graphics([255,80,80], new Parameter(3389.5, 'km'))});
 
 // Jupiter
 let jupiter_orbit = new Orbit(sol, {
