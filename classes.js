@@ -1,55 +1,169 @@
-// TODO: propagate position through Orbit -> ReferencePlane -> Orbit -> ReferencePlane -> ... -> NullReferencePlane
+// TOOD: Rewrite documentation in jsdoc format just for lolz idk
+import {unit} from './units.js';
+import {Matrix4} from 'https://unpkg.com/three@0.118.3/build/three.module.js';
 
 
 class ReferencePlane {
-	constructor(orbit, M) {
+	constructor(M, orbit, phi=undefined, theta=undefined, psi=undefined) {
 		/*
-			x : x coordinate of origin
-			y : y coordinate of origin
-			z : z cooridnate of origin
-			phi : obliquity
-			theta : some angle or something
-			psi : some other angle or something
-			M : mass of central body
+			@param M [Parameter] [kg]: mass of central body
+			@param orbit [Orbit]: orbit which the center of this reference plane follows
+			@param phi [Parameter] [deg]: obliquity
+			@param theta [Parameter] [deg]: some angle or something
+			@param psi [Parameter] [deg]: some other angle or something
 		*/
+		this.M = Parameter.makeParameter(M, 'kg');
 		this.orbit = orbit;
+		if (phi === undefined) {
+			this.phi = this.orbit.Omega;
+		} else {
+			this.phi = Parameter.makeParameter(phi, 'deg');
+		}
+		if (theta === undefined) {
+			this.theta = this.orbit.i;
+		} else {
+			this.theta = Parameter.makeParameter(theta, 'deg');
+		}
+		if (psi === undefined) {
+			this.psi = this.orbit.omega;
+		} else {
+			this.psi = Parameter.makeParameter(psi, 'deg');
+		}
+
+		this.angleFixed = this.phi.isStatic && this.theta.isStatic && this.psi.isStatic;
+		this.positionFixed = this.orbit instanceof NullOrbit;
+		this.isStatic = this.angleFixed && this.positionFixed;
+
+		if (this.angleFixed) {
+			this.rotationMatrix = this.getRotationMatrix(0);
+		} // Don't do this for translation because it is easy to calculate anyway and units might mess things up
 	}
 
-	get GM() {
-		return this.M*6.67408e-11;
+	get GM() { // Returns something in m³/s²
+		return this.M.in('kg')*6.67408e-11;
 	}
 
-	position(t, outputUnit='m') {
-		return this.orbit.position(t, outputUnit=outputUnit)
+	position(t, timeStepUnit='ms', outputUnit='m') {
+		return this.orbit.position(t, timeStepUnit, outputUnit)
+	}
+
+	getRotationMatrix(t, timeStepUnit='ms') {
+		let angleZ0 = this.phi.at(t, timeStepUnit, 'rad');
+		let angleX = this.theta.at(t, timeStepUnit, 'rad');
+		let angleZ1 = this.psi.at(t, timeStepUnit, 'rad');
+
+		let c1, c2, c3, s1, s2, s3;
+		c1 = Math.cos(angleZ0);s1 = Math.sin(angleZ0);
+		c2 = Math.cos(angleX);s2 = Math.sin(angleX);
+		c3 = Math.cos(angleZ1);s3 = Math.sin(angleZ1);
+		let m_rot = new Matrix4();
+		m_rot.set( c1*c3-c2*s1*s3, -c1*s3-c2*c3*s1, s1*s2, 0,
+			c3*s1+c1*c2*s3, c1*c2*c3-s1*s3, -c1*s2, 0,
+			s2*s3, c3*s2, c2, 0,
+			0,0,0,1);
+		
+		return m_rot
+	}
+
+	getTranslationMatrix(t, timeStepUnit='ms', outputUnit='AU') {
+		let m_tr = new Matrix4();
+		let pos = this.position(t, timeStepUnit, outputUnit);
+		m_tr.makeTranslation(pos.x, pos.y, pos.z);
+
+		return m_tr
+	}
+
+	getMatrix(t, timeStepUnit='ms', outputUnit='AU') {
+		// Rotation
+		let m_rot;
+		if (this.rotationMatrix) {
+			m_rot = this.rotationMatrix;
+		} else {
+			m_rot = this.getRotationMatrix(t, timeStepUnit);
+		}
+
+		// Translation
+		let m_tr = this.getTranslationMatrix(t, timeStepUnit, outputUnit);
+
+		return m_rot.multiply(m_tr).multiply(this.orbit.ref.getMatrix(t, timeStepUnit, outputUnit)); // "rot after tr after parent_referenceplane"
 	}
 }
 
 class FreeReferencePlane {
-	constructor(M, x=new Parameter(0, 'm'), y=new Parameter(0, 'm'), z=new Parameter(0, 'm'), phi=new Parameter(0, 'rad'), theta=new Parameter(0, 'rad'), psi=new Parameter(0, 'rad')) {
+	constructor(M=new Parameter(1, 'M☉'), x=new Parameter(0, 'm'), y=new Parameter(0, 'm'), z=new Parameter(0, 'm'), phi=new Parameter(0, 'rad'), theta=new Parameter(0, 'rad'), psi=new Parameter(0, 'rad')) {
 		/*
-			M : mass of central body
-			x : x coordinate of origin
-			y : y coordinate of origin
-			z : z cooridnate of origin
-			phi : obliquity
-			theta : some angle or something
-			psi : some other angle or something
+			@param M [Parameter] [kg]: mass of central body
+			@param x [Parameter] [m]: x coordinate of origin
+			@param y [Parameter] [m]: y coordinate of origin
+			@param z [Parameter] [m]: z cooridnate of origin
+			@param phi [Parameter] [deg]: obliquity
+			@param theta [Parameter] [deg]: some angle or something
+			@param psi [Parameter] [deg]: some other angle or something
 		*/
-		this.x = x.in('m');
-		this.y = y.in('m');
-		this.z = z.in('m');
-		this.phi = phi.in('rad');
-		this.theta = theta.in('rad');
-		this.psi = psi.in('rad');
-		this.M = M;
+		this.M = Parameter.makeParameter(M, 'kg');
+		this.x = Parameter.makeParameter(x, 'm');
+		this.y = Parameter.makeParameter(y, 'm');
+		this.z = Parameter.makeParameter(z, 'm');
+		this.phi = Parameter.makeParameter(phi, 'deg');
+		this.theta = Parameter.makeParameter(theta, 'deg');
+		this.psi = Parameter.makeParameter(psi, 'deg');
+
+		this.angleFixed = this.phi.isStatic && this.theta.isStatic && this.psi.isStatic;
+		this.positionFixed = this.x.isStatic && this.y.isStatic && this.z.isStatic;
+		this.isStatic = this.angleFixed && this.positionFixed;
+
+		if (this.angleFixed) {
+			this.rotationMatrix = this.getRotationMatrix(0);
+		} // Don't do this for translation because it is easy to calculate anyway and units might mess things up
 	}
 
-	get GM() {
-		return this.M*6.67408e-11;
+	get GM() { // Returns something in m³/s²
+		return this.M.in('kg')*6.67408e-11;
 	}
 
-	position(t, outputUnit='m') {
-		return {x:unit(this.x, 'm', outputUnit), y:unit(this.y, 'm', outputUnit), z:unit(this.z, 'm', outputUnit)}
+	position(t, timeStepUnit='ms', outputUnit='m') {
+		return {x:this.x.at(t, timeStepUnit, outputUnit), y:this.y.at(t, timeStepUnit, outputUnit), z:this.z.at(t, timeStepUnit, outputUnit)}
+	}
+
+	getRotationMatrix(t, timeStepUnit='ms') {
+		let angleZ0 = this.phi.at(t, timeStepUnit, 'rad');
+		let angleX = this.theta.at(t, timeStepUnit, 'rad');
+		let angleZ1 = this.psi.at(t, timeStepUnit, 'rad');
+
+		let c1, c2, c3, s1, s2, s3;
+		c1 = Math.cos(angleZ0);s1 = Math.sin(angleZ0);
+		c2 = Math.cos(angleX);s2 = Math.sin(angleX);
+		c3 = Math.cos(angleZ1);s3 = Math.sin(angleZ1);
+		let m_rot = new Matrix4();
+		m_rot.set( c1*c3-c2*s1*s3, -c1*s3-c2*c3*s1, s1*s2, 0,
+			c3*s1+c1*c2*s3, c1*c2*c3-s1*s3, -c1*s2, 0,
+			s2*s3, c3*s2, c2, 0,
+			0,0,0,1);
+		
+		return m_rot
+	}
+
+	getTranslationMatrix(t, timeStepUnit='ms', outputUnit='AU') {
+		let m_tr = new Matrix4();
+		let pos = this.position(t, timeStepUnit, outputUnit);
+		m_tr.makeTranslation(pos.x, pos.y, pos.z);
+
+		return m_tr
+	}
+
+	getMatrix(t, timeStepUnit='ms', outputUnit='AU') {
+		// Rotation
+		let m_rot;
+		if (this.rotationMatrix) {
+			m_rot = this.rotationMatrix;
+		} else {
+			m_rot = this.getRotationMatrix(t, timeStepUnit);
+		}
+
+		// Translation
+		let m_tr = this.getTranslationMatrix(t, timeStepUnit, outputUnit);
+
+		return m_rot.multiply(m_tr); // "rot after tr"
 	}
 }
 
@@ -106,9 +220,9 @@ class Orbit {
 		this.P = this.a.applyFunction((x => 2*Math.PI*Math.sqrt(x**3/this.ref.GM)), 's', this.a.timeStepUnit) ; // Period [s]
 	}
 
-	position(t, outputUnit='m') {
+	position(t, timeStepUnit='ms', outputUnit='m') {
 		/*
-			t : timestamp in milliseconds since Javascript epoch (i.e. 1970)
+			t : timestamp (in milliseconds) since Javascript epoch (i.e. 1970)
 			return : {x:, y:, z:}
 		*/
 	   
@@ -118,15 +232,15 @@ class Orbit {
 
 		//// Step 1: get delta_t
 		let epoch = new Date(2000, 0, 1, 11, 58, 55, 816); // January 1, 2000, 11:58:55.816 UTC
-		let delta_t = t - epoch.getTime(); // Milliseconds from epoch to t
+		let delta_t = unit(t, timeStepUnit, 'ms') - epoch.getTime(); // Milliseconds from epoch to t
 
 		// Get all 'this.' orbit parameters at time delta_t into local variables
-		let Omega = this.Omega.at(delta_t);
-		let i = this.i.at(delta_t);
-		let e = this.e.at(delta_t);
-		let omega = this.omega.at(delta_t);
-		let a = this.a.at(delta_t);
-		let M0 = this.M0.at(delta_t);
+		let Omega = this.Omega.at(delta_t, 'ms', 'rad');
+		let i = this.i.at(delta_t, 'ms', 'rad');
+		let e = this.e.at(delta_t, 'ms');
+		let omega = this.omega.at(delta_t, 'ms', 'rad');
+		let a = this.a.at(delta_t, 'ms', outputUnit);
+		let M0 = this.M0.at(delta_t, 'ms', 'rad');
 		
 		let P = this.P.at(delta_t);
 
@@ -146,11 +260,12 @@ class Orbit {
 		//// Step 3: find x,y coordinate along this ellipse
 		let x = a*(Math.cos(E) - e);
 		let y = a*Math.sin(E)*Math.sqrt(1 - e**2);
-		let z = 0, temp;
+		let z = 0;
 
 		//// Step 4: multiply coordinate with matrices in order to rotate elliptic orbit into correct position
+		// TODO: Could maybe precalculate cosines and sines, but they are only used twice so the performance increase might be negligible?
 		// Rotate point by argument of periapsis around z-axis
-		temp = x;
+		let temp = x;
 		x = Math.cos(omega)*x - Math.sin(omega)*y;
 		y = Math.sin(omega)*temp + Math.cos(omega)*y;
 		// Rotate point by inclination around x-axis
@@ -162,22 +277,17 @@ class Orbit {
 		x = Math.cos(Omega)*x - Math.sin(Omega)*y; 
 		y = Math.sin(Omega)*temp + Math.cos(Omega)*y;
 
-		//// Step 5: move this also according to the angles of the reference plane
-		// Rotate point by psi around z-axis
-		temp = x;
-		x = Math.cos(this.ref.psi)*x - Math.sin(this.ref.psi)*y;
-		y = Math.sin(this.ref.psi)*temp + Math.cos(this.ref.psi)*y;
-		// Rotate point by theta around x-axis
-		temp = y;
-		y = Math.cos(this.ref.theta)*y - Math.sin(this.ref.theta)*z;
-		z = Math.sin(this.ref.theta)*temp + Math.cos(this.ref.theta)*z; 
-		// Rotate point by phi around z-axis
-		temp = x;
-		x = Math.cos(this.ref.phi)*x - Math.sin(this.ref.phi)*y; 
-		y = Math.sin(this.ref.phi)*temp + Math.cos(this.ref.phi)*y;
+		// Tadaa, we have the actual x,y,z coordinate in our parent reference frame!
+		return {x:x, y:y, z:z}
+	}
 
-		// Tadaa, we have the actual x,y,z coordinate in our master reference frame!
-		return {x:unit(x, 'm', outputUnit),y:unit(y, 'm', outputUnit),z:unit(z, 'm', outputUnit)}
+	position_abs(t, timeStepUnit='ms', outputUnit='m') {
+		let m = this.ref.getMatrix(t, timeStepUnit, outputUnit).elements;
+		let pos = this.position(t, timeStepUnit, outputUnit);
+		let x = m[0]*pos.x + m[4]*pos.y + m[8]*pos.z + m[12];
+		let y = m[1]*pos.x + m[5]*pos.y + m[7]*pos.z + m[13];
+		let z = m[2]*pos.x + m[6]*pos.y + m[10]*pos.z + m[14];
+		return {x:x, y:y, z:z}
 	}
 }
 
@@ -205,7 +315,7 @@ class NullOrbit {
 }
 
 class Orbiter {
-	constructor(name, type, orbit, {graphics}={}) {
+	constructor(name, type, orbit, {graphics, rotation}={}) {
 		/*
 			@param name [str]: Name of the object
 			@param <type> [str]: Type of this object (e.g. 'planet', 'asteroid', 'comet', ...)
@@ -218,6 +328,11 @@ class Orbiter {
 		} else {
 			this.graphics = new Graphics(255, new Parameter(1, 'm'));
 		}
+		if (rotation) {
+			this.rotation = rotation;
+		} else {
+			this.rotation = new Rotation(this.orbit.ref, 0, 90, new Parameter([0, 1], 'rad', 'day'));
+		}
 
 		// Add this to this type
 		this.type = type || '';
@@ -228,8 +343,8 @@ class Orbiter {
 		}
 	}
 
-	position(t, outputUnit='m') {
-		return this.orbit.position(t, outputUnit=outputUnit);
+	position(t, timeStepUnit='ms', outputUnit='m') {
+		return this.orbit.position_abs(t, timeStepUnit, outputUnit);
 	}
 }
 Orbiter.types = {}
@@ -248,19 +363,21 @@ class Parameter {
 
 	at(t, timeStepUnit='ms', outputUnit=this.unit) {
 		return unit(this.array.reduce((accumulator, currentValue, index, array) => accumulator + currentValue*unit(t, timeStepUnit, this.timeStepUnit)**index), this.unit, outputUnit)
-		
 	}
 
-	in(outputUnit) {
-		return unit(this.val, this.unit, outputUnit);
-	}
-
-	convertUnit(to) {
-		let newArray = [];
-		for (let i = 0; i < this.array.length; i++) {
-			newArray.push(unit(this.array[i], this.unit, to))
+	in(outputUnit) { // TODO: Should remove this function since it is better to just convertUnit
+		if (this.isStatic) {
+			return unit(this.val, this.unit, outputUnit);
+		} else {
+			throw `Can not use Parameter.in('${outputUnit}'): this parameter is time-dependent. Use Parameter.convertUnit instead.`
 		}
-		return new Parameter(newArray, to, this.timeStepUnit)
+	}
+
+	convertUnit(to, timeStepUnit=this.timeStepUnit) {
+		let spaceConv = unit(1, this.unit, to);
+		let timeConv = unit(1, timeStepUnit, this.timeStepUnit);
+		let newArray = this.array.map((x,i) => x*spaceConv*timeConv**i);
+		return new Parameter(newArray, to, timeStepUnit)
 	}
 
 	add(other) {
@@ -296,10 +413,21 @@ class Parameter {
 			throw `The new unit and/or time unit was not defined. Please specify the resulting unit as a second argument, as it is not possible to calculate the new correct unit for a complex function.`
 		}
 	}
+
+	get isStatic() {
+		return this.length == 1;
+	}
+}
+Parameter.makeParameter = function(thing, defaultUnit, defaultTimeStepUnit='ms') {
+	if (thing instanceof Parameter) {
+		return thing
+	} else {
+		return new Parameter(thing, defaultUnit, defaultTimeStepUnit)
+	}
 }
 
-class Graphics {
-	constructor(color, radius) {
+class Graphics { // TODO: still need a better way of incorporating THREE in this
+	constructor(color, radius, {textureFile}={}) {
 		let r, g, b;
 		if (Number.isInteger(color)) { // Greyscale
 			r = color; g = color; b = color;
@@ -312,6 +440,12 @@ class Graphics {
 		this.radius = radius;
 
 		this.isThree = false;
+
+		this.hasTexture = false;
+		if (textureFile) {
+			this.textureFile = textureFile;
+			this.hasTexture = true;
+		}
 	}
 
 	set mesh(threeMesh) {
@@ -342,41 +476,28 @@ class Graphics {
 	}
 }
 
+class Rotation {
+	constructor(ref, RA, dec, r) {
+		/*
+			If any orbital parameter is specified as a function of time,
+			this time should be in MILLISECONDS SINCE JULIAN EPOCH
+			@param ref [ReferencePlane]: Plane of reference for the positive pole of the axis
+			@param RA [Parameter] [deg]: Right ascension of the rotational axis w.r.t. ref
+			@param dec [Parameter] [deg]: Declination of the rotational axis w.r.t. ref
+			@param r [Parameter] [deg/day]: Rotation at a time t (zeroth order is rotation at epoch, first order is rotation speed)
+		*/
+		this.ref = ref;
+		this.RA = Parameter.makeParameter(RA, 'deg', 'ms');
+		this.dec = Parameter.makeParameter(dec, 'deg', 'ms');
+		this.r = Parameter.makeParameter(r, 'deg', 'day');
+		this.angleFixed = this.ref.angleFixed && this.RA.angleFixed && this.dec.angleFixed && this.r.angleFixed;
 
-function unit(n, from, to) {
-	//console.log(`${n}, ${from}, ${to}`);
-	if (from == to) {
-		return n // This is what stops the recursion
-	}
-	switch (from) {
-		case 'm': case 'rad': case 's': // These are fundamental units, so just convert the units now
-			return n/unit(1, to, from) // unit(n, to, from) yields the conversion coefficient
-
-		case 'AU':
-			return unit(n*149597870700, 'm', to || 'm')
-		case 'km':
-			return unit(n*1000, 'm', to || 'm')
-
-		case 'deg':
-			return unit(n/180*Math.PI, 'rad', to || 'rad')
-		case 'arcsec': case 'as': case '"':
-			return unit(n/3600, 'deg', to || 'deg')
-
-		case 'ms':
-			return unit(n/1000, 's', to || 's')
-		case 'hour': case 'hours':
-			return unit(n*3600, 's', to || 's')
-		case 'day': case 'days':
-			return unit(n*86400, 's', to || 's')
-		case 'year':case 'years':
-			return unit(n*31557600, 's', to || 's')
-		case 'century': case 'centuries': case 'Cy':
-			return unit(n*3155760000, 's', to || 's')
-		
-		default:
-			raise `Unit '${from}' unknown.`
-			return undefined // If 'from' is not a known unit
+		if (this.ref.angleFixed) {
+			// math if the angles are all stationary
+		} else {
+			// math if the reference plane changes
+		}
 	}
 }
 
-export {ReferencePlane, FreeReferencePlane, Orbit, NullOrbit, Orbiter, Parameter, Graphics, unit}
+export {ReferencePlane, FreeReferencePlane, Orbit, NullOrbit, Orbiter, Parameter, Graphics, Rotation}
