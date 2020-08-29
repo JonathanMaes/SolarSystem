@@ -30,7 +30,7 @@ class ReferencePlane {
 			this.psi = Parameter.makeParameter(psi, 'deg');
 		}
 
-		this.angleFixed = this.phi.isStatic && this.theta.isStatic && this.psi.isStatic;
+		this.angleFixed = this.orbit.ref.angleFixed && this.phi.isStatic && this.theta.isStatic && this.psi.isStatic;
 		this.positionFixed = this.orbit instanceof NullOrbit;
 		this.isStatic = this.angleFixed && this.positionFixed;
 
@@ -85,7 +85,7 @@ class ReferencePlane {
 		// Translation
 		let m_tr = this.getTranslationMatrix(t, timeStepUnit, outputUnit);
 
-		return m_rot.multiply(m_tr).multiply(this.orbit.ref.getMatrix(t, timeStepUnit, outputUnit)); // "rot after tr after parent_referenceplane"
+		return m_tr.multiply(m_rot).multiply(this.orbit.ref.getMatrix(t, timeStepUnit, outputUnit)); // "rot after tr after parent_referenceplane"
 	}
 }
 
@@ -163,7 +163,7 @@ class FreeReferencePlane {
 		// Translation
 		let m_tr = this.getTranslationMatrix(t, timeStepUnit, outputUnit);
 
-		return m_rot.multiply(m_tr); // "rot after tr"
+		return m_tr.multiply(m_rot); // "rot after tr"
 	}
 }
 
@@ -174,16 +174,16 @@ class Orbit {
 			If any orbital parameter is specified as a function of time,
 			this time should be in MILLISECONDS SINCE JULIAN EPOCH
 			@param ref [ReferencePlane]: Plane of reference for this orbit
-			@param Omega [Parameter] [deg] erm i mean [rad]: Longitude of ascending node
-			@param i [Parameter] [deg] erm i mean [rad]: Inclination to reference plane
+			@param Omega [Parameter] [rad]: Longitude of ascending node
+			@param i [Parameter] [rad]: Inclination to reference plane
 			@param e [Parameter] [-]: Eccentricity
-			@param <omega> [Parameter] [deg] erm i mean [rad]: Argument of perihelion
-			@param~ <omegabar> [Parameter] [deg] erm i mean [rad]: Longitude of perihelion (= Omega + omega)
+			@param <omega> [Parameter] [rad]: Argument of periapsis
+			@param~ <omegabar> [Parameter] [rad]: Longitude of periapsis (= Omega + omega)
 			@param <a> [Parameter] [m]: Semi-major axis
 			@param~ <q> [Parameter] [m]: Distance of periapsis
 			@param~ <n> [Parameter] [rad/s]: Mean motion
-			@param <M0> [Parameter] [deg] erm i mean [rad]: Mean anomaly at epoch
-			@param~ <L0> [Parameter] [deg] erm i mean [rad]: Longitude at epoch (= M0 + Omega + omega)
+			@param <M0> [Parameter] [rad]: Mean anomaly at epoch
+			@param~ <L0> [Parameter] [rad]: Longitude at epoch (= M0 + Omega + omega)
 		*/
 		this.ref = ref; // Reference plane object
 
@@ -457,21 +457,21 @@ class Graphics { // TODO: still need a better way of incorporating THREE in this
 		if (this.isThree) {
 			return this.threeMesh
 		} else {
-			raise `Tried to access mesh, but this object does not have a mesh.`
+			throw `Tried to access mesh, but this object does not have a mesh.`
 		}
 	}
 	get geometry() {
 		if (this.isThree) {
 			return this.threeMesh.geometry
 		} else {
-			raise `Tried to access geometry, but this object is not a three.js object.`
+			throw `Tried to access geometry, but this object is not a three.js object.`
 		}
 	}
 	get material() {
 		if (this.isThree) {
 			return this.threeMesh.material
 		} else {
-			raise `Tried to access material, but this object is not a three.js object.`
+			throw `Tried to access material, but this object is not a three.js object.`
 		}
 	}
 }
@@ -490,13 +490,49 @@ class Rotation {
 		this.RA = Parameter.makeParameter(RA, 'deg', 'ms');
 		this.dec = Parameter.makeParameter(dec, 'deg', 'ms');
 		this.r = Parameter.makeParameter(r, 'deg', 'day');
-		this.angleFixed = this.ref.angleFixed && this.RA.angleFixed && this.dec.angleFixed && this.r.angleFixed;
+		this.angleFixed = this.ref.angleFixed && this.RA.isStatic && this.dec.isStatic && this.r.isStatic;
 
-		if (this.ref.angleFixed) {
-			// math if the angles are all stationary
+		this.axisRotationMatrix = new THREE.Matrix4();
+
+		if (this.angleFixed) { // Means all the parent referenceplanes have a fixed angle as well
+			this.rotationMatrix = 0;
 		} else {
 			// math if the reference plane changes
 		}
+	}
+
+	getRotationMatrix(t, timeStepUnit='ms') {
+		// let rotation axis be X axis (X+ = north) => rotate around Z (RA) -> rotate around Y (dec) -> rotate around X (r)
+		let angleZ0 = this.RA.at(t, timeStepUnit, 'rad');
+		let angleX = this.theta.at(t, timeStepUnit, 'rad');
+		let angleZ1 = this.psi.at(t, timeStepUnit, 'rad');
+
+		let c1, c2, c3, s1, s2, s3;
+		c1 = Math.cos(angleZ0);s1 = Math.sin(angleZ0);
+		c2 = Math.cos(angleX);s2 = Math.sin(angleX);
+		c3 = Math.cos(angleZ1);s3 = Math.sin(angleZ1);
+		let m_rot = new Matrix4();
+		m_rot.set( c1*c3-c2*s1*s3, -c1*s3-c2*c3*s1, s1*s2, 0,
+			c3*s1+c1*c2*s3, c1*c2*c3-s1*s3, -c1*s2, 0,
+			s2*s3, c3*s2, c2, 0,
+			0,0,0,1);
+		
+		return m_rot
+	}
+
+	getMatrix(t, timeStepUnit='ms', outputUnit='AU') {
+		// Rotation
+		let m_rot;
+		if (this.rotationMatrix) {
+			m_rot = this.rotationMatrix;
+		} else {
+			m_rot = this.getRotationMatrix(t, timeStepUnit);
+		}
+
+		// Translation
+		let m_tr = this.getTranslationMatrix(t, timeStepUnit, outputUnit);
+
+		return m_rot.multiply(this.ref.getMatrix(t, timeStepUnit, outputUnit)); // "rot after tr"
 	}
 }
 
