@@ -106,4 +106,24 @@ let pluto_orbit = new Orbit(sol, {
 	e: new Parameter([0.24880766, 0.00006465], '', 'Cy'),
 	L0: new Parameter([238.92881, unit(522747.90, 'as', 'deg')], 'deg', 'Cy')
 });
-let pluto = new Orbiter('Pluto', 'dwarfplanet', pluto_orbit, {graphics:new Graphics(255, new Parameter(1135, 'km'))})
+let pluto = new Orbiter('Pluto', 'dwarfplanet', pluto_orbit, {graphics:new Graphics(255, new Parameter(1135, 'km'))});
+
+
+
+
+/* ========================================================================= */
+
+let equatorial_earth = new ReferencePlane(new Parameter(1, 'M⊕'), earth_orbit, 0, new Parameter(-84381.448, 'as'), 0);
+let ecliptic_earth = new ReferencePlane(new Parameter(1, 'M⊕'), earth_orbit, 0, 0, 0);
+
+// Moon
+let moon_orbit = new Orbit(ecliptic_earth, {
+	Omega: new Parameter([125.08, 360/18.600], 'deg', 'year'),
+	i: new Parameter([5.145], 'deg', 'Cy'),
+	omega: new Parameter([318.15, 360/8.85], 'deg', 'year'),
+	a: new Parameter([0.2], 'AU', 'Cy'),
+	e: new Parameter([0.05490], '', 'Cy'),
+	// M0: new Parameter([135.27, unit(1732559260.2, 'as', 'deg')], 'deg', 'Cy'),
+	M0: new Parameter([135.27, unit(2.6616995e-6, 'rad', 'deg')], 'deg', 's')
+});
+let moon = new Orbiter('Moon', 'moon', moon_orbit, {graphics:new Graphics(255, new Parameter(3000, 'km'))});
