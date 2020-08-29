@@ -492,7 +492,7 @@ class Rotation {
 		this.r = Parameter.makeParameter(r, 'deg', 'day');
 		this.angleFixed = this.ref.angleFixed && this.RA.isStatic && this.dec.isStatic && this.r.isStatic;
 
-		this.axisRotationMatrix = new THREE.Matrix4();
+		this.axisRotationMatrix = new Matrix4();
 
 		if (this.angleFixed) { // Means all the parent referenceplanes have a fixed angle as well
 			this.rotationMatrix = 0;
