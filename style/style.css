@@ -1,0 +1,52 @@
+:root {
+    --sidebar-width: 150px;
+}
+
+body {
+    padding: 0;
+    margin: 0;
+}
+
+canvas {
+    display:block;
+}
+
+#sidebar {
+    position:absolute;
+    right: 0px;
+    top: 0px;
+    bottom: 0px;
+    width: var(--sidebar-width);
+    height:100%;
+    background:#111;
+
+    color:#fff;
+}
+
+#time {
+    padding-top:2px;
+    padding-bottom:2px;
+    width:100%;
+    height:auto;
+    font-family:"Courier New", Courier, monospace;
+    font-size:15px;
+    text-align:center;
+    /* border-bottom:2px solid white; */
+    background-color:white;
+    color:black;
+    font-weight:bold;
+}
+
+#switches {
+    padding:4px;
+}
+
+#mainCanvas {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+    display: block;
+    z-index: -1;
+  }
