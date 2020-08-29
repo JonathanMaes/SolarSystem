@@ -41,7 +41,7 @@ function unit(n, from, to) {
 			return unit(n*5.9722e24, 'kg', to || 'kg')
 
 		default:
-			raise `Unit '${from}' unknown.`
+			throw `Unit '${from}' unknown.`
 			return undefined // If 'from' is not a known unit
 	}
 }
